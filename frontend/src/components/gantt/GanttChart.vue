@@ -16,10 +16,12 @@
 			<GanttTimelineHeader
 				:timeline-data="timelineData"
 				:day-width-pixels="dayWidthPixels"
+				:style="{marginInlineStart: `${gripGutter}px`}"
 			/>
 
 			<GanttVerticalGridLines
 				:positions="gridLinePositions"
+				:style="{insetInlineStart: `${gripGutter}px`}"
 				:total-width="totalWidth"
 				:height="ganttRows.length * 40"
 			/>
@@ -41,7 +43,7 @@
 							:style="{
 								top: `${band.startIndex * ROW_HEIGHT}px`,
 								height: `${(band.endIndex - band.startIndex + 1) * ROW_HEIGHT}px`,
-								left: `${band.left}px`,
+								left: `${gripGutter + band.left}px`,
 								width: `${band.width}px`,
 							}"
 						/>
@@ -63,6 +65,7 @@
 										v-if="reorderable"
 										type="button"
 										class="gantt-row-grip"
+										:class="{'is-alt': index % 2}"
 										:aria-label="$t('project.gantt.reorderRow', {task: ganttBars[index]?.[0]?.meta?.label ?? ''})"
 										@pointerdown="startRowDrag(index, $event)"
 									>
@@ -94,6 +97,7 @@
 						</div>
 						<GanttRelationArrows
 							v-if="relationArrows.length > 0"
+							:style="{insetInlineStart: `${gripGutter}px`}"
 							:arrows="relationArrows"
 							:width="totalWidth"
 							:height="totalHeight"
@@ -163,6 +167,10 @@ const emit = defineEmits<{
 }>()
 
 const containerWidth = ref(0)
+const ROW_GRIP_WIDTH = 24
+// The grips get their own column; everything positioned on the timeline starts after it.
+const gripGutter = computed(() => props.reorderable ? ROW_GRIP_WIDTH : 0)
+const gripWidth = `${ROW_GRIP_WIDTH}px`
 let resizeObserver: ResizeObserver | undefined
 
 const {tasks, filters} = toRefs(props)
@@ -198,7 +206,7 @@ const dayCount = computed(() => Math.max(
 	Math.ceil((dateToDate.value.valueOf() - dateFromDate.value.valueOf()) / MILLISECONDS_A_DAY),
 ))
 
-const fitDayWidthPixels = computed(() => containerWidth.value / dayCount.value)
+const fitDayWidthPixels = computed(() => (containerWidth.value - gripGutter.value) / dayCount.value)
 
 const dayWidthPixels = computed(() => Math.max(fitDayWidthPixels.value, filters.value.zoom))
 
@@ -403,7 +411,7 @@ function applyZoom(zoom: number, clientX?: number) {
 		const offset = clientX === undefined
 			? el.clientWidth / 2
 			: clientX - el.getBoundingClientRect().left
-		zoomAnchor = {days: (el.scrollLeft + offset) / dayWidthPixels.value, offset}
+		zoomAnchor = {days: (el.scrollLeft + offset - gripGutter.value) / dayWidthPixels.value, offset}
 	}
 
 	emit('update:zoom', next)
@@ -417,7 +425,7 @@ watch(dayWidthPixels, async () => {
 	await nextTick()
 	const el = ganttContainer.value
 	if (!el) return
-	el.scrollLeft = anchor.days * dayWidthPixels.value - anchor.offset
+	el.scrollLeft = anchor.days * dayWidthPixels.value + gripGutter.value - anchor.offset
 }, {flush: 'post'})
 
 // Steps start from the rendered day width, not the stored zoom: when the range fits the container
@@ -473,7 +481,8 @@ function onKeyDown(e: KeyboardEvent) {
 function scrollToDate(date: Date) {
 	const el = ganttContainer.value
 	if (!el) return
-	const left = computeBarX(date) - el.clientWidth / 2 + dayWidthPixels.value / 2
+	// Centre within the visible timeline, which starts after the pinned grip column.
+	const left = computeBarX(date) - (el.clientWidth - gripGutter.value) / 2 + dayWidthPixels.value / 2
 	el.scrollTo({left: Math.max(0, left), behavior: 'smooth'})
 }
 
@@ -1026,9 +1035,8 @@ onUnmounted(() => {
 	inline-size: 100%;
 }
 
-// Sticky so it stays reachable while the timeline scrolls; the negative margin keeps the bars
-// aligned with the timeline header. Above the bar layer (.gantt-row-bars, z-index 4) so a bar
-// starting at the left edge of the range doesn't cover it.
+// Sticky and opaque so it stays reachable while the timeline scrolls and bars pass underneath;
+// above the bar layer (.gantt-row-bars, z-index 4).
 .gantt-row-grip {
 	position: sticky;
 	inset-inline-start: 0;
@@ -1037,15 +1045,19 @@ onUnmounted(() => {
 	flex-shrink: 0;
 	align-items: center;
 	justify-content: center;
-	inline-size: 1.5rem;
+	inline-size: v-bind(gripWidth);
 	block-size: 40px;
-	margin-inline-end: -1.5rem;
 	padding: 0;
 	border: 0;
-	background: transparent;
+	background: var(--white);
 	color: var(--grey-400);
 	cursor: grab;
 	touch-action: none;
+
+	// Same tint as .bg-row-alt in GanttRow, over the opaque base.
+	&.is-alt {
+		background: linear-gradient(hsla(var(--grey-100-hsl), .5), hsla(var(--grey-100-hsl), .5)), var(--white);
+	}
 
 	&:hover,
 	&:focus-visible {
