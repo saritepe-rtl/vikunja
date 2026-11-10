@@ -92,6 +92,20 @@ describe('GanttChart.vue', () => {
 		expect(scrollTo).toHaveBeenCalledWith({left: 10 * 30 - 300 + 15, behavior: 'smooth'})
 	})
 
+	it('centres a date in the timeline that starts after the grip column', async () => {
+		const wrapper = mountChart(false)
+		await wrapper.setProps({reorderable: true})
+		await nextTick()
+		const container = wrapper.find('.gantt-container').element as HTMLElement
+		const scrollTo = vi.fn()
+		container.scrollTo = scrollTo
+		Object.defineProperty(container, 'clientWidth', {value: 600})
+
+		;(wrapper.vm as unknown as {scrollToDate: (date: Date) => void}).scrollToDate(new Date('2026-08-11T12:00:00'))
+
+		expect(scrollTo).toHaveBeenCalledWith({left: 10 * 30 - (600 - 24) / 2 + 15, behavior: 'smooth'})
+	})
+
 	it('zooms with the keyboard', async () => {
 		const wrapper = mountChart(false)
 		await nextTick()
